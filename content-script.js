@@ -1,23 +1,54 @@
-console.log('in content script')
+let currentTable = null
 
-const anchors = document.getElementsByTagName('a')
+document.body.addEventListener("mouseover", (e) => {
+  if (!(e.target && e.target.href && e.target.href.indexOf('wiki') !== -1)) {
+    return
+  }
 
-for (const anchor of anchors) {
-  anchor.addEventListener("mouseover", (e) => {
-    console.log('you hovered over me')
-    console.log(e.target)
+  chrome.runtime.sendMessage({ url: e.target.href }, (res) => {
+    console.log('getting response back')
+    const { text } = res
+    const url = new URL(res.url)
+    // console.log(res)
+    
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(text, 'text/html')
+    const recipe = doc.getElementsByClassName('background-1')[0] || doc.querySelector('table.crafts')
+    
+    if (!recipe) {
+      return
+    }
 
-    chrome.runtime.sendMessage({ url: e.target.href }, (res) => {
-      console.log('getting response back')
-      // console.log(res)
+    if (currentTable && currentTable.remove) {
+      currentTable.remove()
+    }
 
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(res, 'text/html')
-      const recipe = doc.getElementsByClassName('background-1')[0]
-      recipe.style = recipe.style['position'] = 'absolute'
-      document.body.append(recipe)
-      // document.getElementById('firstHeading').append(recipe)
-      console.log(recipe)
-    })
+    for (const img of recipe.querySelectorAll('img')) {
+      if (img.getAttribute('src').indexOf('http://') !== -1 || img.getAttribute('src').indexOf('https://') !== -1) {
+        continue
+      }
+
+      const imgUrl = new URL(img.src)
+      let newUrl = new URL(url)
+      newUrl.pathname = imgUrl.pathname
+      img.src = newUrl
+    }
+    
+    currentTable = recipe
+    const { top, left } = e.target.getBoundingClientRect()
+
+    recipe.style['position'] = 'absolute'
+    recipe.style['top'] = `${window.scrollY + top + 75}px`
+    recipe.style['left'] = `${window.scrollX + left}px`
+
+    document.body.append(recipe)
   })
-}
+})
+
+document.body.addEventListener("mouseout", (e) => {
+  if (currentTable && currentTable.remove) {
+    currentTable.remove()
+  }
+
+  currentTable = null
+})
